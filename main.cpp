@@ -1,6 +1,7 @@
 #include <iostream>
 #include <curl/curl.h>
 #include <string>
+#include "libs/nlohmann/json.hpp"
 
 size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* output) {
     size_t totalSize = size * nmemb;
@@ -8,16 +9,17 @@ size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* out
     return totalSize;
 }
 
-int main(){
+std::string playlistcall(char urlLink[]){
   CURL *curl;
   CURLcode res;
   std::string response;
-
+  nlohmann::json j= {
+    "song_name", "artist" 
+  };
 
   curl = curl_easy_init();
   if(curl){
-    curl_easy_setopt(curl, CURLOPT_URL, "https://google.com");
-    
+    curl_easy_setopt(curl, CURLOPT_URL, urlLink);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
@@ -25,10 +27,16 @@ int main(){
     if(res != CURLE_OK){
       std::cerr << "CURL ERROR: " << curl_easy_strerror(res) << std::endl;
     }
-    else{
-      std::cout << "Response: \n" << response << std::endl;
-    }
     curl_easy_cleanup(curl);
   }
-  return 0;
+  return response;
+}
+
+int main(){
+  char uInput[100];
+  std::cout << "Playlist: ";
+  std::cin >> uInput;
+  std::cout << playlistcall(uInput);
+  
+
 }

@@ -1,42 +1,33 @@
 #include <iostream>
 #include <curl/curl.h>
 #include <string>
-#include "libs/nlohmann/json.hpp"
 
-size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* output) {
-    size_t totalSize = size * nmemb;
-    output->append((char*)contents, totalSize);
-    return totalSize;
+// could put in main prob
+std::string authorizationLink(){
+  CURL *curl = curl_easy_init();
+
+  std::string CLIENT_ID = "CLIENT ID";
+  std::string state = "houndiin";
+  char redirect_uri[] = "http://localhost:5000/callback";
+  char scope[] = "playlist-read-private";
+  
+  char *encoded_scope = curl_easy_escape(curl, scope, 0);
+  char *encoded_redirectUri = curl_easy_escape(curl, redirect_uri, 0);
+
+  //URL AUTHORIZATION
+  std::string authorization_url = "https://accounts.spotify.com/authorize?"
+       "client_id=" + CLIENT_ID + "&response_type=code" +
+       "&redirect_uri=" + encoded_redirectUri +  "&scope=" + encoded_scope +
+      "&state=" + state;
+  curl_easy_cleanup(curl);
+  return authorization_url;
 }
 
-std::string playlistcall(char urlLink[]){
-  CURL *curl;
-  CURLcode res;
-  std::string response;
-  nlohmann::json j= {
-    "song_name", "artist" 
-  };
-
-  curl = curl_easy_init();
-  if(curl){
-    curl_easy_setopt(curl, CURLOPT_URL, urlLink);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-
-    res = curl_easy_perform(curl);
-    if(res != CURLE_OK){
-      std::cerr << "CURL ERROR: " << curl_easy_strerror(res) << std::endl;
-    }
-    curl_easy_cleanup(curl);
-  }
-  return response;
-}
+std::string getSpotifyToken();
 
 int main(){
-  char uInput[100];
-  std::cout << "Playlist: ";
-  std::cin >> uInput;
-  std::cout << playlistcall(uInput);
+  std::cout << authorizationLink() << std::endl;
   
 
+  return 0;
 }

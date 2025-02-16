@@ -1,6 +1,7 @@
 #include <iostream>
 #include <curl/curl.h>
 #include <string>
+#include "libs/httplib.h"
 
 // could put in main prob
 std::string authorizationLink(){

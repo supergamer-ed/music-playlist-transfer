@@ -8,9 +8,9 @@
 std::string randomSTRING(int len);
 
 std::string authorizationLink(){
-  std::string CLIENT_ID = "aa01935e5e29454789557c03542c8e29";
+  std::string CLIENT_ID = "secrets";
   std::string redirect_uri = "http://localhost:5000/callback";
-  std::string scope = "playlist-read-private";
+  std::string scope = "playlist-read-private playlist-modify-private";
   std::string state = randomSTRING(16);
   //ENCODED
   auto encoded_redirect_uri = curl_easy_escape(nullptr, redirect_uri.c_str(),0);
@@ -37,15 +37,23 @@ std::string getSpotifytoken();
 
 int main(){
   httplib::Server svr;
-
   std::cout << authorizationLink() << std::endl;
   svr.Get("/callback", [](const httplib::Request &req, httplib::Response &res){
-    res.set_content("Hello World!", "text/plain");
+    if(req.has_param("code") && !(req.has_param("error"))){
+      std::string codeSPO = req.get_param_value("code");
+      res.set_content("?code=" + codeSPO, "text/plain");
+    }
+    else{
+      std::string error_SPOT = req.get_param_value("error");
+      res.set_content("error =" + error_SPOT, "text/plain");
+    }
   });
+  
 
 
   svr.listen("localhost", 5000);
 }
+
 std::string randomSTRING(int len){
   const std::string CHARS
         = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuv"

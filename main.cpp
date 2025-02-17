@@ -1,34 +1,35 @@
 #include <iostream>
-#include <curl/curl.h>
 #include <string>
+#include <curl/curl.h>
 #include "libs/httplib.h"
 
-// could put in main prob
 std::string authorizationLink(){
-  CURL *curl = curl_easy_init();
+  std::string CLIENT_ID = "ssksks";
+  std::string redirect_uri = "http://localhost:5000/callback";
+  std::string scope = "playlist-read-private";
+  auto encoded_redirect_uri = curl_easy_escape(nullptr, redirect_uri.c_str(),0);
+  std::string new_uri(encoded_redirect_uri);
+  curl_free(encoded_redirect_uri);
 
-  std::string CLIENT_ID = "CLIENT ID";
-  std::string state = "houndiin";
-  char redirect_uri[] = "http://localhost:5000/callback";
-  char scope[] = "playlist-read-private";
-  
-  char *encoded_scope = curl_easy_escape(curl, scope, 0);
-  char *encoded_redirectUri = curl_easy_escape(curl, redirect_uri, 0);
+  std::string authURL = "https://accounts.spotify.com/authorize";
+  authURL += "?client_id=" + CLIENT_ID;
+  authURL += "&response_type=code";
+  authURL += "&redirect_uri=" + new_uri;
+  authURL += "&show_dialog=true";
+  authURL += "&scope=" + scope;
 
-  //URL AUTHORIZATION
-  std::string authorization_url = "https://accounts.spotify.com/authorize?"
-       "client_id=" + CLIENT_ID + "&response_type=code" +
-       "&redirect_uri=" + encoded_redirectUri +  "&scope=" + encoded_scope +
-      "&state=" + state;
-  curl_easy_cleanup(curl);
-  return authorization_url;
+  return authURL;
 }
 
-std::string getSpotifyToken();
 
 int main(){
-  std::cout << authorizationLink() << std::endl;
-  
+  httplib::Server svr;
 
-  return 0;
+  std::cout << authorizationLink() << std::endl;
+  svr.Get("/callback", [](const httplib::Request &req, httplib::Response &res){
+    res.set_content("Hello World!", "text/plain");
+  });
+
+
+  svr.listen("localhost", 5000);
 }

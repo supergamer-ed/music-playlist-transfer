@@ -10,15 +10,17 @@ std::string randomSTRING(int len);
 std::string authorizationLink(){
   std::string CLIENT_ID = "secrets";
   std::string redirect_uri = "http://localhost:5000/callback";
-  std::string scope = "playlist-read-private playlist-modify-private";
   std::string state = randomSTRING(16);
   //ENCODED
+  auto encoded_scope = curl_easy_escape(nullptr, "playlist-read-private playlist-modify-private", 0);
   auto encoded_redirect_uri = curl_easy_escape(nullptr, redirect_uri.c_str(),0);
   auto encoded_state = curl_easy_escape(nullptr, state.c_str(), 0);
   std::string new_uri(encoded_redirect_uri);
   std::string new_state(encoded_state);
+  std::string scope(encoded_scope);
   curl_free(encoded_state);
   curl_free(encoded_redirect_uri);
+  curl_free(encoded_scope);
 
 
   std::string authURL = "https://accounts.spotify.com/authorize";
@@ -38,6 +40,8 @@ std::string getSpotifytoken();
 int main(){
   httplib::Server svr;
   std::cout << authorizationLink() << std::endl;
+
+
   svr.Get("/callback", [](const httplib::Request &req, httplib::Response &res){
     if(req.has_param("code") && !(req.has_param("error"))){
       std::string codeSPO = req.get_param_value("code");

@@ -8,7 +8,7 @@
 std::string randomSTRING(int len);
 
 std::string authorizationLink(){
-  std::string CLIENT_ID = "";
+  std::string CLIENT_ID = "id";
   std::string redirect_uri = "http://localhost:5000/callback";
   std::string state = randomSTRING(16);
   //ENCODED
@@ -34,21 +34,20 @@ std::string authorizationLink(){
   return authURL;
 }
 
-std::string getSpotifytoken();
-
 
 int main(){
+  std::string auth_code;
   httplib::Server svr;
-  std::cout << authorizationLink();
 
-  svr.Get("/callback", [](const httplib::Request &req, httplib::Response &res){
+  std::cout << authorizationLink() << std::endl; //if std::endl is removed, it will not display this std::cout
+
+  //obtain code for api, next svr.get will request token
+  svr.Get("/callback", [&auth_code](const httplib::Request &req, httplib::Response &res){
       if(req.has_param("code")){
-        std::string codeSPO = req.get_param_value("code");
-        res.set_content("?code=" + codeSPO, "text/plain");
+        auth_code = req.get_param_value("code");
       }
-      if (req.has_param("error")){
-        std::string errorCODE = req.get_param_value("code");
-        res.set_content("error= " + errorCODE, "text/plain");
+      if(req.has_param("error")){
+        auth_code = req.get_param_value("error");
       }
   });
   

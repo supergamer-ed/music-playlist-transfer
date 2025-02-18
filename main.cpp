@@ -7,7 +7,7 @@
 
 std::string randomSTRING(int len);
 
-std::string authorizationLink(){
+std::string authorizationLink(std::string& new_state){
   std::string CLIENT_ID = "id";
   std::string redirect_uri = "http://localhost:5000/callback";
   std::string state = randomSTRING(16);
@@ -16,7 +16,7 @@ std::string authorizationLink(){
   auto encoded_redirect_uri = curl_easy_escape(nullptr, redirect_uri.c_str(),0);
   auto encoded_state = curl_easy_escape(nullptr, state.c_str(), 0);
   std::string new_uri(encoded_redirect_uri);
-  std::string new_state(encoded_state);
+  new_state = encoded_state;
   std::string scope(encoded_scope);
   curl_free(encoded_state);
   curl_free(encoded_redirect_uri);
@@ -36,19 +36,26 @@ std::string authorizationLink(){
 
 
 int main(){
-  std::string auth_code;
+  std::string auth_code, state;
   httplib::Server svr;
 
-  std::cout << authorizationLink() << std::endl; //if std::endl is removed, it will not display this std::cout
+
+  std::cout << authorizationLink(state) << std::endl; //if std::endl is removed, it will not display this std::cout
 
   //obtain code for api, next svr.get will request token
-  svr.Get("/callback", [&auth_code](const httplib::Request &req, httplib::Response &res){
+  svr.Get("/callback", [&auth_code, &state](const httplib::Request &req, httplib::Response &res){
+    if(state == req.get_param_value("state")){
       if(req.has_param("code")){
         auth_code = req.get_param_value("code");
+        res.set_content("HELLO", "text/plain");
+        std::cout << "HOLD ON" << std::endl;
       }
-      if(req.has_param("error")){
+      else if(req.has_param("error")){
         auth_code = req.get_param_value("error");
+        res.set_content("ERROR: " + auth_code, "text/plain");
+        std::cout << "ERROR: " << auth_code << std::endl;
       }
+    }
   });
   
 

@@ -2,14 +2,17 @@
 #include <string>
 #include <random>
 #include <curl/curl.h>
+#include "libs/nlohmann/json.hpp"
 #include "libs/httplib.h"
 
+//variables used in all URLs
+std::string const CLIENT_ID = "id";
+std::string const CLIENT_SECRET = "secret";
+std::string const redirect_uri = "http://localhost:5000/callback";
 
 std::string randomSTRING(int len);
 
 std::string authorizationLink(std::string& new_state){
-  std::string CLIENT_ID = "id";
-  std::string redirect_uri = "http://localhost:5000/callback";
   std::string state = randomSTRING(16);
   //ENCODED
   auto encoded_scope = curl_easy_escape(nullptr, "playlist-read-private playlist-modify-private", 0);
@@ -34,6 +37,7 @@ std::string authorizationLink(std::string& new_state){
   return authURL;
 }
 
+std::string spotifyTOKEN(std::string auth_code);
 
 int main(){
   std::string auth_code, state;
@@ -50,17 +54,33 @@ int main(){
         res.set_content("HELLO", "text/plain");
         std::cout << "HOLD ON" << std::endl;
       }
-      else if(req.has_param("error")){
+      if(req.has_param("error")){
         auth_code = req.get_param_value("error");
         res.set_content("ERROR: " + auth_code, "text/plain");
         std::cout << "ERROR: " << auth_code << std::endl;
       }
     }
   });
-  
+
 
 
   svr.listen("localhost", 5000);
+}
+
+std::string spotifyTOKEN(std::string auth_code){
+  std::string tokenURL = "https://accounts.spotify.com/api/token";
+
+  //encoding URL
+  auto encoded_redirect_uri = curl_easy_escape(nullptr, redirect_uri.c_str(), 0);
+  std::string new_redirectURI(encoded_redirect_uri);
+  curl_free(encoded_redirect_uri);
+
+  tokenURL += "?code=" + auth_code;
+  tokenURL += "&grant_type=authorization_code";
+  tokenURL += "&redirect_uri=" + new_redirectURI;
+
+
+
 }
 
 std::string randomSTRING(int len){

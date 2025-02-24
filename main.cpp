@@ -4,6 +4,7 @@
 #include <curl/curl.h>
 #include "libs/nlohmann/json.hpp"
 #include "libs/httplib.h"
+#include "libs/base64.h"
 
 //variables used in all URLs
 std::string const CLIENT_ID = "id";
@@ -27,12 +28,12 @@ std::string authorizationLink(std::string& new_state){
 
 
   std::string authURL = "https://accounts.spotify.com/authorize";
-  authURL += "?client_id=" + CLIENT_ID;
-  authURL += "&response_type=code";
-  authURL += "&redirect_uri=" + new_uri;
-  authURL += "&show_dialog=true";
-  authURL += "&scope=" + scope;
-  authURL += "&state=" + new_state;
+  authURL = "?client_id=" + CLIENT_ID
+          + "&response_type=code"
+          + "&redirect_uri=" + new_uri
+          + "&show_dialog=true"
+          + "&scope=" + scope
+          + "&state=" + new_state;
 
   return authURL;
 }
@@ -42,12 +43,13 @@ std::string spotifyTOKEN(std::string auth_code);
 int main(){
   std::string auth_code, state;
   httplib::Server svr;
+  httplib::Headers headers;
 
 
   std::cout << authorizationLink(state) << std::endl; //if std::endl is removed, it will not display this std::cout
 
   //obtain code for api, next svr.get will request token
-  svr.Get("/callback", [&auth_code, &state](const httplib::Request &req, httplib::Response &res){
+  svr.Get("/callback", [&auth_code, state](const httplib::Request &req, httplib::Response &res){
     if(state == req.get_param_value("state")){
       if(req.has_param("code")){
         auth_code = req.get_param_value("code");
@@ -63,24 +65,26 @@ int main(){
   });
 
 
-
   svr.listen("localhost", 5000);
 }
 
 std::string spotifyTOKEN(std::string auth_code){
-  std::string tokenURL = "https://accounts.spotify.com/api/token";
+  std::string req_body = "https://accounts.spotify.com/api/token";
+  std::string base_auth = CLIENT_ID + ":" + CLIENT_SECRET;
 
   //encoding URL
   auto encoded_redirect_uri = curl_easy_escape(nullptr, redirect_uri.c_str(), 0);
   std::string new_redirectURI(encoded_redirect_uri);
   curl_free(encoded_redirect_uri);
 
-  tokenURL += "?code=" + auth_code;
-  tokenURL += "&grant_type=authorization_code";
-  tokenURL += "&redirect_uri=" + new_redirectURI;
-
-
-
+  req_body += "?code=" + auth_code + "&grant_type=authorization_code";
+            + "&redirect_uri=" + new_redirectURI;
+    
+  httplib::Headers headers = {{"content-type", "application/x-www-form-urlencoded"},
+                              {"Authorization", "Basic " + 
+                              base64_encode(reinterpret_cast<const unsigned char*>(auth_code.c_str()), auth_code.length())}
+                              //interprets the pointer data type to a const unsigned char and takes c string which is y .c_str is used
+                            };
 }
 
 std::string randomSTRING(int len){

@@ -38,7 +38,7 @@ std::string authorizationLink(std::string& new_state){
   return authURL;
 }
 
-std::string spotifyTOKEN(std::string auth_code);
+int spotifyTOKEN(std::string auth_code, httplib::Headers& headers);
 
 int main(){
   std::string auth_code, state;
@@ -49,7 +49,7 @@ int main(){
   std::cout << authorizationLink(state) << std::endl; //if std::endl is removed, it will not display this std::cout
 
   //obtain code for api, next svr.get will request token
-  svr.Get("/callback", [&auth_code, state](const httplib::Request &req, httplib::Response &res){
+  svr.Get("/callback", [&auth_code, state, &svr](const httplib::Request &req, httplib::Response &res){
     if(state == req.get_param_value("state")){
       if(req.has_param("code")){
         auth_code = req.get_param_value("code");
@@ -62,29 +62,54 @@ int main(){
         std::cout << "ERROR: " << auth_code << std::endl;
       }
     }
+    else {
+      svr.stop();
+      std::cout << "bruh security error, just relaunch";
+    }
   });
+  
+
+  int res = spotifyTOKEN(auth_code, headers);
+  if(res == 69){
+    std::cout << "freaking boss bro" << std::endl;
+  }
+  else{
+    std::cout << "do physics" << std::endl;
+  }
+
 
 
   svr.listen("localhost", 5000);
 }
 
-std::string spotifyTOKEN(std::string auth_code){
-  std::string req_body = "https://accounts.spotify.com/api/token";
+int spotifyTOKEN(std::string auth_code, httplib::Headers& headers){
   std::string base_auth = CLIENT_ID + ":" + CLIENT_SECRET;
+  httplib::Client cli("https://accounts.spotify.com");
 
   //encoding URL
   auto encoded_redirect_uri = curl_easy_escape(nullptr, redirect_uri.c_str(), 0);
   std::string new_redirectURI(encoded_redirect_uri);
   curl_free(encoded_redirect_uri);
 
-  req_body += "?code=" + auth_code + "&grant_type=authorization_code";
-            + "&redirect_uri=" + new_redirectURI;
+  nlohmann::json json_POSTdata = {{"code", auth_code}, 
+                  {"grant_type", "authorization_code"},
+                  {"redirect_uri", new_redirectURI}};
+  std::string json_stringdata = json_POSTdata.dump(); //serializes the json data
     
-  httplib::Headers headers = {{"content-type", "application/x-www-form-urlencoded"},
-                              {"Authorization", "Basic " + 
-                              base64_encode(reinterpret_cast<const unsigned char*>(auth_code.c_str()), auth_code.length())}
-                              //interprets the pointer data type to a const unsigned char and takes c string which is y .c_str is used
-                            };
+  headers = {{"content-type", "application/x-www-form-urlencoded"},
+             {"Authorization", "Basic " + 
+               base64_encode(reinterpret_cast<const unsigned char*>(auth_code.c_str()), auth_code.length())}
+             //interprets the pointer data type to a const unsigned char and takes c string which is y .c_str is used
+            };
+
+
+  auto res = cli.Post("/api/token", headers, json_stringdata, "application/x-www-form-urlencoded");
+  if(res->status == 200){
+    return 69;
+  }
+  else{
+    return -1;
+  }
 }
 
 std::string randomSTRING(int len){

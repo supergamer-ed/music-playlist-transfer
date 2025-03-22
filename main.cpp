@@ -15,6 +15,7 @@ std::string const CLIENT_SECRET = "secret";
 std::string const redirect_uri = "http://localhost:5000/callback";
 
 std::string randomSTRING(int len);
+///sss
 
 std::string authorizationLink(std::string& new_state){
   std::string state = randomSTRING(16);

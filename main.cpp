@@ -45,11 +45,16 @@ std::string spotifyTOKEN(std::string auth_code, std::string body);
 
 void svrStarter(std::string state, std::string& auth_code);
 
+// going to place this writeback function in a future main.cpp since im spliting these apis into header files
+// size_t is an unsigned data type 
+size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp){
+  ((std::string*)userp)->append((char*)contents, size * nmemb); // got it from curl lib (not me)
+  return size * nmemb; //returns the total size of the data being handled after the curl easy request
+}
+
 int main(){
   std::string auth_code, state, bodyDATA, encoded_URI;
-  httplib::SSLClient cli("accounts.spotify.com");
-  httplib::Result postRESULT;
-
+  
   //spotify authorizationlink pops up
   std::cout << authorizationLink(state, encoded_URI) << std::endl;
 
@@ -58,20 +63,22 @@ int main(){
 
   //POST REQUEST BELOW TO SPOTIFY API
 
-  //std::string jointID = CLIENT_ID + ":" + CLIENT_SECRET;
-  //encodes the jointid and is set to true to make it URL passable
-  //std::string encodedID = base64_encode(jointID, true);
-  //there was a '.' that needed to be removed in order to post
-  //encodedID[encodedID.size()-1] = '\0';
-
   /* hell nah jigsaw I put the secret and id in the
   params rather than in theheaders cuz it would not 
   accept it even when I maunally put them bothin a base64 encoder*/
   std::string body = "grant_type=authorization_code&code=" + auth_code + "&redirect_uri=" + encoded_URI + 
   "&client_id=" + CLIENT_ID + "&client_secret=" + CLIENT_SECRET;
-  std::cout << body << std::endl;
-  std::string resultsPLZ = spotifyTOKEN(auth_code, body);
-  std::cout << resultsPLZ << std::endl;
+
+  std::string tokenRESULTS = spotifyTOKEN(auth_code, body);
+  nlohmann::json tokensJSON = nlohmann::json::parse(tokenRESULTS);
+  std::cout << std::endl;
+  std::cout << tokenRESULTS;
+  std::cout << std::endl;
+  std::cout << tokensJSON["access_token"] << std::endl;
+  std::cout << tokensJSON["refresh_token"] << std::endl;
+  std::cout << std::endl;
+  
+
 }
 
 void svrStarter(std::string state, std::string& auth_code){
@@ -105,30 +112,38 @@ void svrStarter(std::string state, std::string& auth_code){
 
 std::string spotifyTOKEN(std::string auth_code, std::string body){
   CURL *curl = curl_easy_init();
-  //std::string headerID = "Authorization: Basic " + encodedID;
+  std::string tokenBODY;
   if(curl){
     //headers
     struct curl_slist *headers_lis1 = NULL;
     headers_lis1 = curl_slist_append(headers_lis1, "Content-Type: application/x-www-form-urlencoded");
-    //headers_lis1 = curl_slist_append(headers_lis1, headerID.c_str());
     //post setting options
     curl_easy_setopt(curl, CURLOPT_HEADER, headers_lis1);
     curl_easy_setopt(curl, CURLOPT_URL, "https://accounts.spotify.com/api/token");
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, body.size());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback); // need this as curl needs to know how to handle the data
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &tokenBODY);
 
     CURLcode res = curl_easy_perform(curl);
+    //curl cleanup
+    curl_slist_free_all(headers_lis1);
     curl_easy_cleanup(curl);
+
+    //filter the writen data so it is easily parsed by nlohmann later
+    int pos = tokenBODY.find("{");
+    tokenBODY = tokenBODY.substr(pos); // takes alway the unneccessary curl info
+
     if(res != CURLE_OK){
-      return "failed";
+      return "RESULT ERROR";
     }
     else{
-      return "good";
+      return tokenBODY;
     }
   }
   else{
-    return "curl failed";
+    return "CURL ERROR";
   }
 }
 

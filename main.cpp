@@ -10,8 +10,8 @@
 #include "libs/nlohmann/json.hpp"
 
 //variables used in all URLs
-std::string const CLIENT_ID = "id";
-std::string const CLIENT_SECRET = "secret";
+std::string const CLIENT_ID = "ID";
+std::string const CLIENT_SECRET = "SECRET";
 std::string const redirect_uri = "http://localhost:5000/callback";
 
 std::string randomSTRING(int len);
@@ -52,8 +52,11 @@ size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp){
   return size * nmemb; //returns the total size of the data being handled after the curl easy request
 }
 
+//(return type) spotifyPlaylist(nlohmann::json parsedMASS); probably idk
+
 int main(){
   std::string auth_code, state, bodyDATA, encoded_URI;
+  httplib::SSLClient cli("api.spotify.com");
   
   //spotify authorizationlink pops up
   std::cout << authorizationLink(state, encoded_URI) << std::endl;
@@ -64,20 +67,79 @@ int main(){
   //POST REQUEST BELOW TO SPOTIFY API
 
   /* hell nah jigsaw I put the secret and id in the
-  params rather than in theheaders cuz it would not 
+  params rather than in the headers cuz it would not 
   accept it even when I maunally put them bothin a base64 encoder*/
-  std::string body = "grant_type=authorization_code&code=" + auth_code + "&redirect_uri=" + encoded_URI + 
+  std::string body1 = "grant_type=authorization_code&code=" + auth_code + "&redirect_uri=" + encoded_URI + 
   "&client_id=" + CLIENT_ID + "&client_secret=" + CLIENT_SECRET;
 
-  std::string tokenRESULTS = spotifyTOKEN(auth_code, body);
+  std::string tokenRESULTS = spotifyTOKEN(auth_code, body1);
   nlohmann::json tokensJSON = nlohmann::json::parse(tokenRESULTS);
-  std::cout << std::endl;
-  std::cout << tokenRESULTS;
-  std::cout << std::endl;
-  std::cout << tokensJSON["access_token"] << std::endl;
-  std::cout << tokensJSON["refresh_token"] << std::endl;
-  std::cout << std::endl;
+
+  std::cout << "Getting Playlist" << std::endl;
+  cli.set_bearer_token_auth(tokensJSON["access_token"].get<std::string>());
+  // calling json with the value wanted then using .get(), allows the value obtained as a string rather than an
+  // object of json
   
+  std::string massDATA;
+  auto res = cli.Get("/v1/me/playlists",
+  [&](const char *data, size_t data_length) {
+    massDATA.append(data, data_length); // Receive content with a content receiver on httplib git
+    return true;
+  });
+
+  nlohmann::json parsedMASS = nlohmann::json::parse(massDATA);
+  auto items = parsedMASS["items"];
+
+  //options for the playlist will pop out using json pointers in nlohmann
+  std::string playlistPATH;
+  int options = 0;
+  std::cout << "\nPlease input desired playlist: " << std::endl;
+  
+  while(options < items.size()){
+    playlistPATH = "/items/" + std::to_string(options) + "/name";
+    std::cout << std::to_string(options+1) + ". "
+    << (parsedMASS.at(nlohmann::json::json_pointer(playlistPATH))).get<std::string>() 
+    << std::endl;
+    options++;
+  }
+  std::cin >> options;
+
+  //CHECKS FOR INCORRECT INPUT, its on sight with them
+  while(options > items.size() || 0 > options){
+    std::cout << "Invalid, choose a valid number" << std::endl;
+    std::cin >> options;
+  }
+
+  //obtain the path of desired playlist
+  playlistPATH = "/" + std::to_string(options-1) + "/tracks/href";
+  massDATA = (items.at(nlohmann::json::json_pointer(playlistPATH))).get<std::string>();
+  int pos = massDATA.find("v");
+  playlistPATH = massDATA.substr(pos-1);
+
+  //send GET REQUEST
+  res = cli.Get(playlistPATH, [&](const char *data, size_t data_length) {
+    massDATA.append(data, data_length); // Receive content with a content receiver on httplib git
+    return true;
+  });
+
+
+
+  
+  
+
+  
+  
+
+
+// keeping this bad boy code, idk y it didnt work with the for loop but with while it did, will c later 
+  /*for(int i = 0; i < items.size(); i++){
+    std::string total = "/items/" + std::to_string(i) + "/name";
+    std::cout << std::to_string(i) + ". "
+    << (parsedMASS.at(nlohmann::json::json_pointer(total))).get<std::string>() 
+    << std::endl;
+  } */
+
+
 
 }
 
@@ -109,6 +171,7 @@ void svrStarter(std::string state, std::string& auth_code){
 
   svr.listen("localhost", 5000);
 }
+
 
 std::string spotifyTOKEN(std::string auth_code, std::string body){
   CURL *curl = curl_easy_init();

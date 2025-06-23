@@ -52,7 +52,7 @@ size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp){
   return size * nmemb; //returns the total size of the data being handled after the curl easy request
 }
 
-//(return type) spotifyPlaylist(nlohmann::json parsedMASS); probably idk
+//(return type) spotifysongFILTER(std::string massDATA); probably idk
 
 int main(){
   std::string auth_code, state, bodyDATA, encoded_URI;
@@ -116,12 +116,36 @@ int main(){
   int pos = massDATA.find("v");
   playlistPATH = massDATA.substr(pos-1);
 
-  //send GET REQUEST
-  res = cli.Get(playlistPATH, [&](const char *data, size_t data_length) {
+  //playlistTEST works will fix code
+  int offset = 0;
+  std::string playlistPATHTEST = playlistPATH + "?limit=100&market=US&offset=" + std::to_string(offset);
+
+  //send GET REQUESTs due to maybe surpassing spotify's 100 limit
+
+  res = cli.Get(playlistPATHTEST, [&](const char *data, size_t data_length) {
     massDATA.append(data, data_length); // Receive content with a content receiver on httplib git
     return true;
   });
+  pos = massDATA.find("{");
+  massDATA = massDATA.substr(pos);
+  parsedMASS = nlohmann::json::parse(massDATA);
+  int totalSONGS = (parsedMASS["total"]).get<int>(); // i will check if the get() is really needed
+  // items = parsedMASS["total"]; will also give the total songs, i think as an int
+ 
+  //loop if there are more than 100 songs, loops every 100(limit of spotify)
+  while(totalSONGS > offset){
+    offset += 100;
+    /* will need to find a way to manage the json, using +=
+    will prob mess it up and simple fix to update the value of 
+    offset in the playlistPATH for the cli.get */
+  }
 
+
+
+
+
+  //then transfer in a function to filter data
+  //spotifysongFILTER(massDATA);
 
 
   
@@ -211,6 +235,7 @@ std::string spotifyTOKEN(std::string auth_code, std::string body){
 }
 
 std::string randomSTRING(int len){
+  //stackoverflow coming in clutch with this bad boi
   const std::string CHARS
         = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuv"
           "wxyz0123456789";

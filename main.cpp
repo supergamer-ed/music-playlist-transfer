@@ -4,15 +4,21 @@
 #include <curl/curl.h>
 #include <thread>
 #include <fstream>
+#include <vector>
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "libs/httplib.h"
 #include "libs/base64.h"
 #include "libs/nlohmann/json.hpp"
 
 //variables used in all URLs
-std::string const CLIENT_ID = "ID";
-std::string const CLIENT_SECRET = "SECRET";
+std::string const CLIENT_ID = "id";
+std::string const CLIENT_SECRET = "secrets";
 std::string const redirect_uri = "http://localhost:5000/callback";
+
+struct Songs{
+  std::string title;
+  std::string author;
+};
 
 std::string randomSTRING(int len);
 
@@ -91,14 +97,15 @@ int main(){
   auto items = parsedMASS["items"];
 
   //options for the playlist will pop out using json pointers in nlohmann
-  std::string playlistPATH;
+  std::string playlistBASE;
   int options = 0;
   std::cout << "\nPlease input desired playlist: " << std::endl;
   
   while(options < items.size()){
-    playlistPATH = "/items/" + std::to_string(options) + "/name";
+    playlistBASE = "/items/" + std::to_string(options) + "/name";
+    //starts to list the playlist, the parsedMASS.at gives the value of json at that path 
     std::cout << std::to_string(options+1) + ". "
-    << (parsedMASS.at(nlohmann::json::json_pointer(playlistPATH))).get<std::string>() 
+    << (parsedMASS.at(nlohmann::json::json_pointer(playlistBASE))).get<std::string>() 
     << std::endl;
     options++;
   }
@@ -110,61 +117,74 @@ int main(){
     std::cin >> options;
   }
 
-  //obtain the path of desired playlist
-  playlistPATH = "/" + std::to_string(options-1) + "/tracks/href";
-  massDATA = (items.at(nlohmann::json::json_pointer(playlistPATH))).get<std::string>();
-  int pos = massDATA.find("v");
-  playlistPATH = massDATA.substr(pos-1);
-
-  //playlistTEST works will fix code
+  //obtain the path of desired playlist because it displays all playlists
+  playlistBASE = "/" + std::to_string(options-1) + "/tracks/href";
+  massDATA = (items.at(nlohmann::json::json_pointer(playlistBASE))).get<std::string>();
+  int pos = massDATA.find("v"); // was a unique character
+  playlistBASE = massDATA.substr(pos-1);
   int offset = 0;
-  std::string playlistPATHTEST = playlistPATH + "?limit=100&market=US&offset=" + std::to_string(offset);
+  std::string playlistPATH = playlistBASE + "?limit=100&market=US&offset=" + std::to_string(offset);
 
-  //send GET REQUESTs due to maybe surpassing spotify's 100 limit
-
-  res = cli.Get(playlistPATHTEST, [&](const char *data, size_t data_length) {
+  //1st GETrequest
+  massDATA.clear();
+  res = cli.Get(playlistPATH, [&](const char *data, size_t data_length) {
     massDATA.append(data, data_length); // Receive content with a content receiver on httplib git
     return true;
   });
+  
+  //store the beginning of the massDATA obtained into array
   pos = massDATA.find("{");
   massDATA = massDATA.substr(pos);
-  parsedMASS = nlohmann::json::parse(massDATA);
-  int totalSONGS = (parsedMASS["total"]).get<int>(); // i will check if the get() is really needed
-  // items = parsedMASS["total"]; will also give the total songs, i think as an int
- 
-  //loop if there are more than 100 songs, loops every 100(limit of spotify)
-  while(totalSONGS > offset){
+  parsedMASS = nlohmann::json::parse(massDATA); //going to make a more ordered json sheet to store song name and artist
+  int num = (parsedMASS["total"]).get<int>();
+  const int totalSONGS = num;
+  std::vector<Songs> desiredPLAYLIST(totalSONGS);
+  
+  //putting songs into array below
+
+  int songIndex = 0;
+  offset = 0;
+  std::string artist, title, artistP, titleP;
+
+  std::cout << "getting them " << totalSONGS << " songs, gimme a min bro" << std::endl;
+  playlistPATH.clear();
+  while(offset < totalSONGS){
+    playlistPATH = playlistBASE + "?limit=100&market=US&offset=" + std::to_string(offset);
+
+    massDATA.clear();
+    auto res = cli.Get(playlistPATH, [&](const char *data, size_t data_length) {
+      massDATA.append(data, data_length);
+      return true;
+    });
+
+    int pos = massDATA.find("{");
+    massDATA = massDATA.substr(pos);
+    auto parasedNEW = nlohmann::json::parse(massDATA);
+    auto itemsPN = parasedNEW["items"];
+
+    //using item.size() actually gives u the total amount of songs, good since its not always 100
+    for(int i = 0; i < itemsPN.size(); i++){
+      titleP = "/items/" + std::to_string(i) + "/track/name";
+      artistP = "/items/" + std::to_string(i) + "/track/artists/0/name";
+
+      title = parasedNEW.at(nlohmann::json::json_pointer(titleP)).get<std::string>();
+      artist = parasedNEW.at(nlohmann::json::json_pointer(artistP)).get<std::string>();
+
+      if (songIndex < totalSONGS) {
+        desiredPLAYLIST[songIndex].title = title;
+        desiredPLAYLIST[songIndex].author = artist;
+        songIndex++; 
+      }
+    }
+
     offset += 100;
-    /* will need to find a way to manage the json, using +=
-    will prob mess it up and simple fix to update the value of 
-    offset in the playlistPATH for the cli.get */
   }
 
-
-
-
-
-  //then transfer in a function to filter data
-  //spotifysongFILTER(massDATA);
-
-
-  
-  
-
-  
-  
-
-
-// keeping this bad boy code, idk y it didnt work with the for loop but with while it did, will c later 
-  /*for(int i = 0; i < items.size(); i++){
-    std::string total = "/items/" + std::to_string(i) + "/name";
-    std::cout << std::to_string(i) + ". "
-    << (parsedMASS.at(nlohmann::json::json_pointer(total))).get<std::string>() 
-    << std::endl;
-  } */
-
-
-
+  std::cout << "\n Playlist Songs" << std::endl;
+  for(int i = 0; i < songIndex; i++){
+    std::cout << desiredPLAYLIST[i].title << " - " << desiredPLAYLIST[i].author << std::endl; 
+  }
+  //if u want to make it into a txt file, just do the loop into that fstream file and import it into urs or whatever
 }
 
 void svrStarter(std::string state, std::string& auth_code){

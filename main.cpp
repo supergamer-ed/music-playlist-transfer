@@ -13,7 +13,8 @@
 //variables used in all URLs
 std::string const CLIENT_ID = "id";
 std::string const CLIENT_SECRET = "secrets";
-std::string const redirect_uri = "http://localhost:5000/callback";
+// new spotify requirement, not localhost
+std::string const redirect_uri = "http://127.0.0.1:8080/callback";
 
 struct Songs{
   std::string title;
@@ -212,8 +213,8 @@ void svrStarter(std::string state, std::string& auth_code){
       std::cout << "bruh security error, just relaunch";
     }
   });
-
-  svr.listen("localhost", 5000);
+  // to match the redirect, opens a server on this port
+  svr.listen("127.0.0.1", 8080);
 }
 
 
@@ -272,3 +273,4 @@ std::string randomSTRING(int len){
   }
   return random_STR;
 }
+

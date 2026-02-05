@@ -1,14 +1,9 @@
-#include <iostream>
-#include <string>
-#include <random>
-#include <curl/curl.h>
-#include <vector>
-#include <limits>
+#include <cstdlib>
+#include "libs/music-playlist-transfer/spotifyFUNCS.hpp"
+#include "libs/music-playlist-transfer/youtubeFUNCS.hpp"
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "libs/httplib.h"
 #include "libs/nlohmann/json.hpp"
-#include "libs/spotifyFUNCS.hpp"
-#include "libs/youtubeFUNCS.hpp"
 
 struct Songs{
   std::string title;
@@ -16,15 +11,20 @@ struct Songs{
 };
 
 int main(){
-  int choice = -1;
-  switch (choice);//yt->spot || spot ->yt
-
-  
   std::string auth_code, state, bodyDATA, encoded_URI;
   httplib::SSLClient cli("api.spotify.com");
 
-  //spotify authorizationlink pops up
-  std::cout << authorizationLink(state, encoded_URI) << std::endl;
+
+  #if defined(_WIN32)
+        std::string link = "start " + authorizationLink(state, encoded_URI);
+  #elif defined(__APPLE__)
+        std::string link = "open \"" + authorizationLink(state, encoded_URI) + "\"";
+  #else
+        std::string link = "xdg-open \"" + authorizationLink(state, encoded_URI) + "\"";
+  #endif
+
+  std::cout << "If anything use:\n" << authorizationLink(state, encoded_URI) << std::endl;
+
 
   //should return the auth_code once its been given
   svrStarter(state, auth_code);
@@ -143,9 +143,38 @@ int main(){
     offset += 100;
   }
 
-  std::cout << "\n Playlist Songs" << std::endl;
+  std::cout << "\n Playlist Songs Include" << std::endl;
   for(int i = 0; i < songIndex; i++){
     std::cout << desiredPLAYLIST[i].title << " - " << desiredPLAYLIST[i].author << std::endl;
   }
-  //if u want to make it into a txt file, just do the loop into that fstream file and import it into urs or whatever
+
+  std::cout << "----Now YT portion----" << std::endl;
+  
+  std::string st, au;
+
+  std::cout << ytauthlink(st) << std::endl;
+
+
+  YT::svrStarter(st, au);
+
+
+  std::cout << au << std::endl;
+
+  httplib::SSLClient ytcli("oauth2.googleapis.com");
+
+  httplib::Params ytparams =
+  {{"client_secret", YT::CLIENT_SECRET.c_str()},
+  {"client_id", YT::CLIENT_ID.c_str()},
+  {"code", au.c_str()},
+  {"grant_type", "authorization_code"},
+  {"redirect_uri", YT::REDIRECT_URI.c_str()}};
+
+  auto yt_R = ytcli.Post("/token", ytparams);
+  if(yt_R->status == 200){
+    std::cout << yt_R->body;
+  }
+  else{
+    std::cerr << yt_R->body; 
+  }
+
 }

@@ -1,6 +1,10 @@
 #pragma once
 #include <iostream>
-
+#include <string>
+#include <random>
+#include <curl/curl.h>
+#include <vector>
+#include <cstdlib>
 
 //constants
 std::string const CLIENT_ID = "id";

@@ -6,7 +6,7 @@
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "libs/httplib.h"
 #include "libs/nlohmann/json.hpp"
-#include "libs/spotifyFUNCS.hpp"
+#include "libs/music-playlist-transfer/spotifyFUNCS.hpp"
 
 // size_t is an unsigned data type
 size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp){

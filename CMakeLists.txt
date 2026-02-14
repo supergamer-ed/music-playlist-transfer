@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.6)
 project(music-transfer)
 
 set(CMAKE_CXX_STANDARD 11)
@@ -9,7 +9,7 @@ target_include_directories(added_libs PUBLIC ${MY_DIRS}
                                              ${MY_DIRS}/libs
                                              ${MY_DIRS}/libs/nlohmann)
 
-find_package(Openssl 3.4 REQUIRED COMPONENTS ssl crypto)
+find_package(OpenSSL REQUIRED)
 if(OpenSSL_FOUND)
     message("Openssl was found")
     include_directories(${OPENSSL_LIBRARIES})

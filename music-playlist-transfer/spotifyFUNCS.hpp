@@ -29,5 +29,8 @@ size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp);
 
 namespace spotify{
     std::vector<Songs> getPlaylist(httplib::SSLClient& pcli, int& totalSONGS);
+    void searchItemsNStore(const std::vector<std::string>& arr);
+    void insertItems(httplib::SSLClient& cli, std::vector<std::string>& arr);
+    std::string normalAcesstoken(httplib::SSLClient& cli);
 };
 

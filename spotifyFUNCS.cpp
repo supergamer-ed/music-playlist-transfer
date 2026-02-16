@@ -2,16 +2,25 @@
 #include <string>
 #include <random>
 #include <curl/curl.h>
+#include <regex.h>
 #include <vector>
 #define CPPHTTPLIB_OPENSSL_SUPPORT
-#include "music-playlist-transfer/libs/httplib.h"
-#include "music-playlist-transfer/libs/nlohmann/json.hpp"
-#include "music-playlist-transfer/spotifyFUNCS.hpp"
+#include "httplib.h"
+#include "nlohmann/json.hpp"
+#include "spotifyFUNCS.hpp"
 
 // size_t is an unsigned data type
 size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp){
   ((std::string*)userp)->append((char*)contents, size * nmemb); // got it from curl lib (not me)
   return size * nmemb; //returns the total size of the data being handled after the curl easy request
+}
+
+void removeSpaces(std::string& s){
+  for(int i = 0; i < s.length(); i++){
+    if(s[i] == ' ' || s[i] == '(' || s[i] == ')'){
+      s[i] = '|';
+    }
+  }
 }
 
 //creates the auth link for user to press 
@@ -234,5 +243,179 @@ std::vector<Songs> spotify::getPlaylist(httplib::SSLClient& cli, int& tSong){
   }
 
   return desiredPLAYLIST;
+}
+
+void spotify::searchItemsNStore(const std::vector<std::string>& arr){
+  httplib::SSLClient authcli("accounts.spotify.com"), apicli("api.spotify.com");
+  int numSongs = arr.size();
+  std::string state = randomSTRING(16), auth_code, encoded_idsecre = CLIENT_ID + ":" + CLIENT_SECRET;
+  std::vector<std::string> rarr(numSongs);
+  std::string encodedscopes = httplib::detail::encode_url("playlist-read-private playlist-modify-private");
+  std::string authurl = "https://accounts.spotify.com/authorize?client_id=" + CLIENT_ID + "&response_type=code&redirect_uri=" 
+                      + httplib::detail::encode_url(redirect_uri) + "&state=" + state + "&scope=" + encodedscopes;
+  std::cout << authurl << std::endl;
+
+  svrStarter(state, auth_code);
+
+  authurl = "/api/token?grant_type=authorization_code&code=" + auth_code 
+          + "&redirect_uri=" + httplib::detail::encode_url(redirect_uri);
+
+  httplib::Headers headers;
+  encoded_idsecre = httplib::detail::base64_encode(encoded_idsecre);
+  headers.emplace("Authorization", ("Basic " + encoded_idsecre));
+  headers.emplace("Content-Type", "application/x-www-form-urlencoded");
+
+  nlohmann::json jsonbody;
+  auto res = authcli.Post(authurl, headers);
+
+  if(res && res->status == 200){
+    jsonbody = nlohmann::json::parse(res->body);
+  }
+  else std::cout << "error";
+
+  apicli.set_bearer_token_auth(jsonbody["access_token"]);
+
+  std::string postURL = "/v1/search?type=track&market=US&limit=2&q=", body;
+  for(int i = 0; i < numSongs; i++){
+    body.clear();
+    std::string qStates =  httplib::detail::encode_url(arr[i]);
+    std::string npostURL = postURL + qStates;
+
+    res = apicli.Get(npostURL,
+    [&](const httplib::Response &response) {
+      if(response.status != 200){
+        std::cout << "Error code: " << response.status 
+        << "\nOn int " << i << ' ' << response.body << std::endl; 
+        return false;
+      }
+      return true;
+    },
+    [&](const char *data, size_t data_length) {
+      body.append(data, data_length);
+      return true; // return 'false' if you want to cancel the request.
+    });
+
+    try{
+      jsonbody = nlohmann::json::parse(body);
+    }
+    catch(...){
+      std::cerr << "Error in parsing" << std::endl;
+      return;
+    }
+
+    std::string compareSTR = jsonbody["tracks"]["items"][0]["name"];
+    std::string addon = jsonbody["tracks"]["items"][0]["artists"][0]["name"];
+    compareSTR = compareSTR + " " + addon;
+    std::string filter = arr[i];
+    removeSpaces(filter);
+    filter = "/" + filter + "/gi";
+
+    std::regex re(filter.c_str());
+    std::cmatch match1, match2;
+
+    //1st
+    std::regex_match(compareSTR.c_str(), match1, re);
+    int j1 = match1.size();
+
+    compareSTR = jsonbody["tracks"]["items"][1]["name"];
+    addon = jsonbody["tracks"]["items"][1]["artists"][0]["name"];
+    compareSTR = compareSTR + " " + addon;
+    
+    //2nd
+    std::regex_match(compareSTR.c_str(), match2, re);
+    int j2 = match2.size();
+
+
+    if(j2>j1){
+      rarr[i] = jsonbody["tracks"]["items"][1]["id"];
+    }
+    else if(j2 == j1){
+      //$["tracks"]["items"][0]["popularity"]
+      int j_v1 = jsonbody["tracks"]["items"][0]["popularity"];
+      int j_v2 = jsonbody["tracks"]["items"][1]["popularity"];
+      if(j_v2 >= j_v1){
+        rarr[i] = jsonbody["tracks"]["items"][1]["id"];
+      }
+      else{
+        rarr[i] = jsonbody["tracks"]["items"][0]["id"];
+      }
+    }
+    else{
+      rarr[i] = jsonbody["tracks"]["items"][0]["id"];
+    }
+
+    
+  }
+  spotify::insertItems(apicli, rarr);
+//tried but its alright, used oauth to get a personalized search
+  return;
+}
+
+void spotify::insertItems(httplib::SSLClient& cli, std::vector<std::string>& arr){
+  ///v1/me/playlists
+  nlohmann::json body = {
+    {"name", "YT playlist"},
+    {"description", "successful, change name if u like"},
+    {"public", false}
+  };
+
+  std::string playlistID, postURL;
+
+  auto res = cli.Post("/v1/me/playlists", body.dump(), "application/json");
+  if(res && res->status == 201){
+    std::cout << "Successfully Created" << std::endl 
+    << "Inserting songs" << std::endl;
+    try{
+      // ["id"] location
+      nlohmann::json parsedData = nlohmann::json::parse(res->body);
+      playlistID = parsedData["id"];
+    }
+    catch(...){
+      std::cerr << "error in parsing, for playlist created";
+      return;
+    }
+  }
+  else {
+    std::cout << res->status << std::endl 
+    << res->body << std::endl;
+  }
+  postURL = "/v1/playlists/" + playlistID + "/tracks";
+
+  int num = arr.size(), tracker = 0;
+  body.clear();
+  nlohmann::json uris = nlohmann::json::array();
+
+  while(num/100 > tracker/100){
+    for(int i = tracker; i < num; i ++){
+      uris.push_back("spotify:track:" + arr[i]);
+    }
+    body["uris"] = uris;
+    body["position"] = 0;
+    res = cli.Post(postURL, body.dump(), "application/json");
+    if(res->status != 201){return;}
+    tracker += 100;
+    body.clear();
+    uris.clear();
+  }
+
+  for(int i = tracker; i < num; i++){
+    uris.push_back("spotify:track:" + arr[i]);
+  }
+
+  body["uris"] = uris;
+  body["position"] = 0;
+
+  res = cli.Post(postURL, body.dump(), "application/json");
+
+  if(res && res->status == 201){
+    std::cout << "Inserted Correctlty\nReturning..."<< std::endl;
+    return;
+  }
+  else{
+    std::cerr << "Error in inserting, debug!" << std::endl 
+    << res->body << std::endl << res->status << std::endl;
+    return;
+  }
+
 }
 

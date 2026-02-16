@@ -1,10 +1,10 @@
 #include <iostream>
 #include <random>
 #include <curl/curl.h>
-#include "music-playlist-transfer/libs/nlohmann/json.hpp"
+#include "nlohmann/json.hpp"
 #define CPPHTTPLIB_OPENSSL_SUPPORT
-#include "music-playlist-transfer/libs/httplib.h"
-#include "music-playlist-transfer/youtubeFUNCS.hpp"
+#include "httplib.h"
+#include "youtubeFUNCS.hpp"
 
 
 std::string ranSTR(int len){
@@ -60,7 +60,7 @@ void YT::svrStarter(std::string state, std::string& auth_code){
       if(state == req.get_param_value("state")){
         if(req.has_param("code")){
           auth_code = req.get_param_value("code");
-          res.set_content("Second Part, Hold on", "text/plain");
+          res.set_content("Hold on", "text/plain");
           std::cout << "HOLD ON" << std::endl;
           if(!auth_code.empty()){
             svr.stop();
@@ -111,7 +111,7 @@ std::string YT::code2TOKEN(std::string authCODE, httplib::SSLClient& cli){
   return token;
 }
 
-void YT::createPlaylist(httplib::SSLClient& cli){
+std::string YT::createPlaylist(httplib::SSLClient& cli){
   std::string namePlay;
   int maxCHAR = 140, option;
   std::cin.ignore();
@@ -155,10 +155,19 @@ void YT::createPlaylist(httplib::SSLClient& cli){
   auto res = cli.Post("/youtube/v3/playlists?part=snippet%2Cstatus", body.dump(), "application/json");
   
   if(res->status == 200){
-    std::cout << "Successfully created, " << namePlay << "!!"<< std::endl;
+    std::cout << "Successfully created the playlist, " << namePlay << "!!"<< std::endl;
+    try{
+      nlohmann::json jsondata = nlohmann::json::parse(res->body);
+      return jsondata["id"];
+    }
+    catch(...){
+      std::cerr << "Error in parasing playlist id in create playlist" << std::endl;
+      return "";
+    }
   }
   else{
-    std::cerr << "Insuccessful, error code: " << res->status << "  " << res->body << std::endl;  
+    std::cerr << "Insuccessful, error code: " << res->status << "  " << res->body << std::endl;
+    return "";  
   }
 }
 
@@ -186,12 +195,6 @@ std::string YT::retrievePlayIDs(httplib::SSLClient& cli){
     << jsonbody["items"][i]["snippet"]["title"].dump() << std::endl;
   }
 
-  if(items == 0){
-    std::cout << "no playlists found, creating a new one" << std::endl;
-    YT::createPlaylist(cli);
-    return "";
-  }
-
   std::cout << "Choose an option above: ";
   int opt = -1;
   std::cin >> opt;
@@ -203,10 +206,78 @@ std::string YT::retrievePlayIDs(httplib::SSLClient& cli){
   }
   opt--;
 
-  return jsonbody["items"][opt]["id"].dump();
+  return jsonbody["items"][opt]["id"];
 }
 
-void addtoPlaylist(httplib::SSLClient& cli, const std::string token, const int posItem, const std::string playID);
+void YT::addtoPlaylist(const int posItem, std::vector<std::string>& arr){
+  std::string randomSTR = ranSTR(16), auth_code;
+  httplib::SSLClient apicli("youtube.googleapis.com"), authcli("oauth2.googleapis.com");
+  
+  std::cout << "Click on:\n" << ytauthlink(randomSTR) << std::endl;
+  
+  //obtains auth code, next will exhcnage for token
+  YT::svrStarter(randomSTR, auth_code);
+
+  std::string tokenBEAR = YT::code2TOKEN(auth_code, authcli);
+
+  apicli.set_bearer_token_auth(tokenBEAR);
+
+  int option;
+  std::cout << "1. Create Playlist\n2. Insert into exisiting\nChoose an option: ";
+  std::cin >> option;
+
+  while(std::cin.fail() || option < 1 || option > 2){
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+    std::cout << "Try agian, enter valid option: ";
+    std::cin >> option;    
+  }
+
+
+  std::string playID;
+  switch (option)
+  {
+  case 1:
+    playID = YT::createPlaylist(apicli);
+    break;
+    case 2:
+    playID = YT::retrievePlayIDs(apicli);
+    break;
+    default:
+    return;
+  }
+  std::cout << "Hold on while it inserts the songs" << std::endl;
+  int max = arr.size();
+  httplib::Result res;
+  std::string urlendpoint = "/youtube/v3/playlistItems?part=snippet";
+  for(int i = posItem; i < max;i++){
+    nlohmann::json jsonDATA = {
+      {"snippet", {
+        {"playlistId", playID},
+        {"resourceId", {
+          {"kind", "youtube#video"},
+          {"videoId", arr[i]}
+        }}
+      }}
+    };
+
+    res = apicli.Post(urlendpoint, jsonDATA.dump(), "application/json");
+    if(res->status != 200){
+      std::cout << "error encountered" << std::endl;
+      if(res->status == 403){
+        std::cout << "Try again tomorrow, max quotas" << std::endl;
+      }
+      else{
+        std::cout << res->status << std::endl << res->body << std::endl;
+        return;
+      }
+    }
+  }
+
+  std::cout << "Check playlist now :)" << std::endl;
+
+  
+}
 
 std::vector<std::string> YT::searchVid(std::vector<Songs>& arrS, const int option){
   //this is the get url that will be passed, will add q whihc is the song title
@@ -225,8 +296,6 @@ std::vector<std::string> YT::searchVid(std::vector<Songs>& arrS, const int optio
 
 
   std::vector<std::string> arr(num);
-
-  std::cout << num << std::endl << option << "\n" << url;
   
 
   for(int i = option, j = 0; i < arrS.size(); i++, j++){
@@ -265,7 +334,73 @@ std::vector<std::string> YT::searchVid(std::vector<Songs>& arrS, const int optio
       continue;
     }
   }
+
+  std::cout << "Success, woooohooooo" << std::endl;
   
+  return arr;
+}
+
+std::vector<std::string> YT::retrieveItems(httplib::SSLClient& cli, std::string listID){
+  std::string body;
+  nlohmann::json jsonbody;
+  std::string id = httplib::detail::encode_url(listID);
+  std::string url = "/youtube/v3/playlistItems?part=snippet&maxResults=5&playlistId=" +
+  id;
+  int index = 0;
+  std::vector<std::string> arr; //the author correlates with the channel name so it does not matter, just need title
+  arr.reserve(1000);//change number if u like but barely anyone has that many songs
+
+  auto res = cli.Get(url,
+  [&](const httplib::Response &response) {
+    if(response.status != 200){
+      std::cout << "Error Code: " << response.status << "\nMeans: " 
+      << response.body << std::endl;
+      return false;
+    }
+    else return true;
+  },
+  [&](const char *data, size_t data_length){
+    body.append(data, data_length);
+    return true;
+  });
+  
+
+  //due to the page refresh in yt, kinda lit ngl
+  while(res && res->status == 200){
+    try{
+      jsonbody = nlohmann::json::parse(body);
+    }
+    catch(...){
+      std::cerr << "Error Parsing";
+      return arr;
+    }
+
+
+    for(int i = 0; i < jsonbody["items"].size(); i++){
+      arr.push_back(jsonbody["items"][i]["snippet"]["title"]);
+    }
+
+    if(jsonbody.contains("nextPageToken")){
+      body.clear();
+      std::string nextPT = jsonbody["nextPageToken"];
+      std::string newURL = url + "&pageToken=" + nextPT;
+      res = cli.Get(newURL,
+        [&](const httplib::Response &response) {
+          if(response.status != 200){
+            std::cout << "Error Code: " << response.status << "\nMeans: " 
+            << response.body << std::endl;
+            return false;
+          }
+          else return true;
+        },
+        [&](const char *data, size_t data_length){
+          body.append(data, data_length);
+          return true;
+        });
+    }
+    else break;
+  }
+
   return arr;
 }
 
